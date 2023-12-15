@@ -9,17 +9,17 @@ from deep_translator import GoogleTranslator
 from kivy import platform
 from os.path import dirname, join
 from docx import Document
-#from plyer import stt
 from datetime import datetime
 from kivy.clock import Clock
-#from speech_events import SpeechEvents
 from kivy.clock import mainthread
 from textwrap import fill
 
 if platform == "android":
+    from speech_events import SpeechEvents
     from androidstorage4kivy import SharedStorage
     from jnius import autoclass
     from android.permissions import request_permissions, Permission
+
     # Define the required permissions
     request_permissions([
         Permission.RECORD_AUDIO,
@@ -30,7 +30,16 @@ if platform == "android":
 
     # Environment
     Environment = autoclass('android.os.Environment')
-    
+
+# Connect to SQLite database (you can replace this with your database connection logic)
+connection = sqlite3.connect("users.db")
+cursor = connection.cursor()
+
+# Create users table if not exists
+cursor.execute('''CREATE TABLE IF NOT EXISTS users
+                    (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password TEXT)''')
+
+
 class SignUpPopup(BoxLayout):
     def __init__(self, app, **kwargs):
         super().__init__(orientation='vertical', spacing=10, **kwargs)
@@ -119,7 +128,6 @@ class MenuBar(BoxLayout):
             print("Login successful!")
             self.popup.dismiss()
             self.logged_in = True  # Update login status
-            self.app.show_microphone_option()
         else:
             print("Invalid credentials")
 
@@ -147,7 +155,7 @@ class MenuBar(BoxLayout):
             self.app.output_box.text = "User not logged in. Please log in to start recording."
 
     def stop_recording(self, instance):
- 
+
         # Check if the user is logged in
         if self.logged_in:
             # Your existing stop_recording logic
@@ -197,106 +205,98 @@ class MyApp(App):
         self.main_layout.add_widget(self.home_screen)
 
         return self.main_layout
-        
-        
-               
+
     def download_file(self, instance):
         self.save_to_word_document()
 
     def start_recording(self, instance):
-    
+
         self.output_box.text = ''
 
         self.unwrapped = ''
-        
+
         self.output_box.text += "\nRecording started."
-        
 
         self.speech_events = SpeechEvents()
-        
-        self.speech_events.create_recognizer(self.recognizer_event_handler)          
-        
+
+        self.speech_events.create_recognizer(self.recognizer_event_handler)
+
         if self.speech_events:
-        
+
             self.unwrapped = ''
-            
+
             self.speech_events.start_listening()
-   	
+
     def stop_recording(self, instance):
-    
+
         self.output_box.text += "\n\nRecording stopped."
-        
+
         self.speech_events.stop_listening()
-        
+
         self.speech_events.share_text_with_clipboard(self.unwrapped)
-        
+
         print(self.unwrapped)
-        
+
         self.update()
-        
+
     @mainthread
     def recognizer_event_handler(self, key, value):
         if key == 'onReadyForSpeech':
-            self.output_box.text += 'Status: Listening.' 
+            self.output_box.text += 'Status: Listening.'
         elif key == 'onBeginningOfSpeech':
             self.output_box.text += 'Status: Speaker Detected.'
         elif key == 'onEndOfSpeech':
-            self.output_box.text += 'Status: Not Listening.' 
+            self.output_box.text += 'Status: Not Listening.'
         elif key == 'onError':
             self.output_box.text += 'Status: ' + value + ' Not Listening.'
         elif key in ['onPartialResults', 'onResults']:
             self.unwrapped = str(value)
             self.output_box.text += fill(value, 40)
-        elif key in ['onBufferReceived', 'onEvent','onRmsChanged']:
+        elif key in ['onBufferReceived', 'onEvent', 'onRmsChanged']:
             pass
-                 
+
     def update(self):
 
         recognized_text = self.unwrapped
 
         translated_text = self.translate_and_display(recognized_text)
-        
+
         self.output_box.text += f"\n\nOriginal Text: {recognized_text}\nTranslated Text: {translated_text}"
-        
+
     def save_to_word_document(self):
 
         # Generate a unique filename with timestamp
         current_datetime = datetime.now()
-        timestamp = current_datetime.strftime("%Y%m%d%H%M%S")  # YearMonthDayHourMinuteSecond
-    
+        timestamp = current_datetime.strftime(
+            "%Y%m%d%H%M%S")  # YearMonthDayHourMinuteSecond
+
         ss = SharedStorage()
-        
+
         document = Document()
         document.add_paragraph(self.output_box.text)
         document_file = f"{timestamp}.docx"
         document.save(document_file)
 
-	# Get the path to the DCIM camera directory
-        save_path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getAbsolutePath()
-        
+        # Get the path to the DCIM camera directory
+        save_path = Environment.getExternalStoragePublicDirectory(
+            Environment.DIRECTORY_DOCUMENTS).getAbsolutePath()
+
         ss.copy_to_shared(document_file, save_path)
-        
+
         self.output_box.text += f"\nFile '{document_file}' saved successfully!\n"
 
     def translate_and_display(self, original_text):
-    
+
         translated_text = self.translate_text(original_text)
-        
+
         return translated_text
 
     def translate_text(self, text):
 
-        translate_text = GoogleTranslator(source='auto', target='en').translate(text)
-        
+        translate_text = GoogleTranslator(
+            source='auto', target='en').translate(text)
+
         return translate_text
-        
-    def show_microphone_option(self):
-        # Create and add a microphone option to the home screen
-        microphone_icon = Label(
-            text="[b]🎤[/b]", markup=True, size_hint=(None, None), height=100, width=40)
-        microphone_button = Button(
-            text="Microphone Option 🎤", size_hint_y=None, height=40, background_color=(0, 0, 1, 1))
-        microphone_button.bind(on_release=self.start_recording)
 
     def show_login_popup(self):
         self.menu_bar.show_login_popup(None)
@@ -308,14 +308,8 @@ class MyApp(App):
         popup.open()
 
     def register_user(self, username, password):
-        # Connect to SQLite database (you can replace this with your database connection logic)
-        connection = sqlite3.connect("users.db")
-        cursor = connection.cursor()
 
         try:
-            # Create users table if not exists
-            cursor.execute('''CREATE TABLE IF NOT EXISTS users
-                              (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, password TEXT)''')
 
             # Insert user data into the table
             cursor.execute(
