@@ -13,6 +13,7 @@ from datetime import datetime
 from kivy.clock import Clock
 from kivy.clock import mainthread
 from textwrap import fill
+from kivy.uix.scrollview import ScrollView
 
 if platform == "android":
     from speech_events import SpeechEvents
@@ -73,7 +74,7 @@ class SignUpPopup(BoxLayout):
 
         if self.app.register_user(username, password):
             print("Registration successful!")
-            self.parent.parent.parent.dismiss()
+            self.cancel
         else:
             print("Registration failed")
 
@@ -112,7 +113,7 @@ class MenuBar(BoxLayout):
         content.add_widget(button_layout)
 
         self.popup = Popup(title='Login', background_color=(
-            0, 0, 1, 1), content=content, size_hint=(None, None), size=(300, 250))
+            0, 0, 1, 1), content=content, size_hint=(.8, .4))
         self.popup.open()
 
     def sign_up_with_google(self, instance):
@@ -152,7 +153,7 @@ class MenuBar(BoxLayout):
             self.app.start_recording(instance)
         else:
             # Display message on the output screen
-            self.app.output_box.text = "User not logged in. Please log in to start recording."
+            self.app.output_box.text = "\nUser not logged in. Please log in to start recording."
 
     def stop_recording(self, instance):
 
@@ -161,7 +162,7 @@ class MenuBar(BoxLayout):
             # Your existing stop_recording logic
             self.app.stop_recording(instance)
         else:
-            self.app.output_box.text = "User not logged in. Please log in to start recording."
+            self.app.output_box.text = "\nUser not logged in. Please log in to start recording."
 
 
 class MyApp(App):
@@ -183,6 +184,11 @@ class MyApp(App):
         # Bind to MenuBar's method
         button_stop_recording.bind(on_press=self.menu_bar.stop_recording)
 
+        button_clear_textbox = Button(
+            text="Clear", size_hint_y=None, height=50, background_color=(128/255, 128/255, 128/255, 1))
+        # Bind to MenuBar's method
+        button_clear_textbox.bind(on_press=self.clear_textbox)
+        
         # Home screen
         self.home_screen = BoxLayout(
             orientation='vertical', spacing=10, padding=10)
@@ -198,6 +204,7 @@ class MyApp(App):
         # Add widgets to home screen
         self.home_screen.add_widget(button_start_recording)
         self.home_screen.add_widget(button_stop_recording)
+        self.home_screen.add_widget(button_clear_textbox)
         self.home_screen.add_widget(self.output_box)
         self.home_screen.add_widget(button_download)
 
@@ -206,6 +213,9 @@ class MyApp(App):
 
         return self.main_layout
 
+    def clear_textbox(self, instance):
+        self.output_box.text = ''
+        
     def download_file(self, instance):
         self.save_to_word_document()
 
@@ -233,25 +243,21 @@ class MyApp(App):
 
         self.speech_events.stop_listening()
 
-        self.speech_events.share_text_with_clipboard(self.unwrapped)
-
-        print(self.unwrapped)
-
         self.update()
 
     @mainthread
     def recognizer_event_handler(self, key, value):
         if key == 'onReadyForSpeech':
-            self.output_box.text += 'Status: Listening.'
+            self.output_box.text += '\n\nStatus: Listening.'
         elif key == 'onBeginningOfSpeech':
-            self.output_box.text += 'Status: Speaker Detected.'
+            self.output_box.text += '\n\nStatus: Speaker Detected.'
         elif key == 'onEndOfSpeech':
-            self.output_box.text += 'Status: Not Listening.'
+            self.output_box.text += '\n\nStatus: Not Listening.'
         elif key == 'onError':
-            self.output_box.text += 'Status: ' + value + ' Not Listening.'
+            self.output_box.text += '\n\nStatus: ' + value + ' Not Listening.'
         elif key in ['onPartialResults', 'onResults']:
             self.unwrapped = str(value)
-            self.output_box.text += fill(value, 40)
+            #self.output_box.text += fill(value, 40)
         elif key in ['onBufferReceived', 'onEvent', 'onRmsChanged']:
             pass
 
@@ -261,7 +267,7 @@ class MyApp(App):
 
         translated_text = self.translate_and_display(recognized_text)
 
-        self.output_box.text += f"\n\nOriginal Text: {recognized_text}\nTranslated Text: {translated_text}"
+        self.output_box.text += f"\n\nTranslated Text: {translated_text}"
 
     def save_to_word_document(self):
 
@@ -283,7 +289,7 @@ class MyApp(App):
 
         ss.copy_to_shared(document_file, save_path)
 
-        self.output_box.text += f"\nFile '{document_file}' saved successfully!\n"
+        self.output_box.text += f"\n\nFile '{document_file}' saved successfully!"
 
     def translate_and_display(self, original_text):
 
@@ -304,7 +310,7 @@ class MyApp(App):
     def show_signup_popup(self):
         content = SignUpPopup(self)
         popup = Popup(title='Sign Up', background_color=(
-            0, 0, 1, 1), content=content, size_hint=(None, None), size=(300, 250))
+            0, 0, 1, 1), content=content, size_hint=(.8, .4))
         popup.open()
 
     def register_user(self, username, password):
