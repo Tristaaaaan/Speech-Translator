@@ -12,7 +12,7 @@ from docx import Document
 #from plyer import stt
 from datetime import datetime
 from kivy.clock import Clock
-from speech_events import SpeechEvents
+#from speech_events import SpeechEvents
 from kivy.clock import mainthread
 from textwrap import fill
 
@@ -56,7 +56,7 @@ class SignUpPopup(BoxLayout):
         self.add_widget(button_layout)
 
     def cancel(self, instance):
-        self.parent.dismiss()
+        self.parent.parent.parent.dismiss()
 
     def register(self, instance):
         username = self.username_input.text
@@ -64,6 +64,7 @@ class SignUpPopup(BoxLayout):
 
         if self.app.register_user(username, password):
             print("Registration successful!")
+            self.parent.parent.parent.dismiss()
         else:
             print("Registration failed")
 
