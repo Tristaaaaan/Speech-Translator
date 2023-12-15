@@ -5,19 +5,32 @@ from kivy.uix.button import Button
 from kivy.uix.label import Label
 from kivy.uix.textinput import TextInput
 from kivy.uix.popup import Popup
-from google_trans_new import google_translator
+from deep_translator import GoogleTranslator
 from kivy import platform
-
+from os.path import dirname, join
 from docx import Document
-import speech_recognition as sr
-import os
-from plyer import stt
+#from plyer import stt
+from datetime import datetime
+from kivy.clock import Clock
+from speech_events import SpeechEvents
+from kivy.clock import mainthread
+from textwrap import fill
 
 if platform == "android":
+    from androidstorage4kivy import SharedStorage
+    from jnius import autoclass
     from android.permissions import request_permissions, Permission
-    request_permissions([Permission.INTERNET, Permission.RECORD_AUDIO])
+    # Define the required permissions
+    request_permissions([
+        Permission.RECORD_AUDIO,
+        Permission.WRITE_EXTERNAL_STORAGE,
+        Permission.READ_EXTERNAL_STORAGE,
+        Permission.INTERNET
+    ])
 
-
+    # Environment
+    Environment = autoclass('android.os.Environment')
+    
 class SignUpPopup(BoxLayout):
     def __init__(self, app, **kwargs):
         super().__init__(orientation='vertical', spacing=10, **kwargs)
@@ -133,12 +146,13 @@ class MenuBar(BoxLayout):
             self.app.output_box.text = "User not logged in. Please log in to start recording."
 
     def stop_recording(self, instance):
+ 
         # Check if the user is logged in
         if self.logged_in:
             # Your existing stop_recording logic
             self.app.stop_recording(instance)
         else:
-            print("User not logged in. Please log in to stop recording.")
+            self.app.output_box.text = "User not logged in. Please log in to start recording."
 
 
 class MyApp(App):
@@ -182,56 +196,99 @@ class MyApp(App):
         self.main_layout.add_widget(self.home_screen)
 
         return self.main_layout
-
+        
+        
+               
     def download_file(self, instance):
         self.save_to_word_document()
 
     def start_recording(self, instance):
+    
+        self.output_box.text = ''
 
-        if stt.listening:
-            self.stop_recording()
-            return
+        self.unwrapped = ''
+        
+        self.output_box.text += "\nRecording started."
+        
 
-        stt.start()
-
+        self.speech_events = SpeechEvents()
+        
+        self.speech_events.create_recognizer(self.recognizer_event_handler)          
+        
+        if self.speech_events:
+        
+            self.unwrapped = ''
+            
+            self.speech_events.start_listening()
+   	
+    def stop_recording(self, instance):
+    
+        self.output_box.text += "\n\nRecording stopped."
+        
+        self.speech_events.stop_listening()
+        
+        self.speech_events.share_text_with_clipboard(self.unwrapped)
+        
+        print(self.unwrapped)
+        
+        self.update()
+        
+    @mainthread
+    def recognizer_event_handler(self, key, value):
+        if key == 'onReadyForSpeech':
+            self.output_box.text += 'Status: Listening.' 
+        elif key == 'onBeginningOfSpeech':
+            self.output_box.text += 'Status: Speaker Detected.'
+        elif key == 'onEndOfSpeech':
+            self.output_box.text += 'Status: Not Listening.' 
+        elif key == 'onError':
+            self.output_box.text += 'Status: ' + value + ' Not Listening.'
+        elif key in ['onPartialResults', 'onResults']:
+            self.unwrapped = str(value)
+            self.output_box.text += fill(value, 40)
+        elif key in ['onBufferReceived', 'onEvent','onRmsChanged']:
+            pass
+                 
     def update(self):
 
-        recognized_text = '\n'.join(stt.results)
+        recognized_text = self.unwrapped
 
         translated_text = self.translate_and_display(recognized_text)
-        self.output_box.text = f"Original Text: {recognized_text}\nTranslated Text: {translated_text}"
-
-    def stop_recording(self, instance):
-        self.output_box.text += "\nRecording stopped."
-        stt.stop()
-        self.update()
-
+        
+        self.output_box.text += f"\n\nOriginal Text: {recognized_text}\nTranslated Text: {translated_text}"
+        
     def save_to_word_document(self):
+
+        # Generate a unique filename with timestamp
+        current_datetime = datetime.now()
+        timestamp = current_datetime.strftime("%Y%m%d%H%M%S")  # YearMonthDayHourMinuteSecond
+    
+        ss = SharedStorage()
+        
         document = Document()
         document.add_paragraph(self.output_box.text)
+        document_file = f"{timestamp}.docx"
+        document.save(document_file)
 
-        # Specify the directory where the file should be saved
-        save_directory = "your_preferred_directory"
-
-        # Check if the directory exists, if not, create it
-        if not os.path.exists(save_directory):
-            os.makedirs(save_directory)
-
-        # Save the document with a predefined name
-        file_path = os.path.join(save_directory, "myconvertedfile.docx")
-        document.save(file_path)
-
-        self.output_box.text += f"\nFile '{file_path}' saved successfully!\n"
+	# Get the path to the DCIM camera directory
+        save_path = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOCUMENTS).getAbsolutePath()
+        
+        ss.copy_to_shared(document_file, save_path)
+        
+        self.output_box.text += f"\nFile '{document_file}' saved successfully!\n"
 
     def translate_and_display(self, original_text):
+    
         translated_text = self.translate_text(original_text)
+        
         return translated_text
 
     def translate_text(self, text):
-        translator = google_translator()
-        translation = translator.translate(text, dest='en')
-        return translation.text
 
+        translate_text = GoogleTranslator(source='auto', target='en').translate(text)
+        
+        return translate_text
+        
     def show_microphone_option(self):
         # Create and add a microphone option to the home screen
         microphone_icon = Label(
